@@ -22,7 +22,7 @@ sampleIMAGES <- function() {
 	IMAGE  <- IMAGES[, , runif(1,1, dim(IMAGES)[3])]
 
 	patchsize <- 8
-	numpatches <- 10000
+	numpatches <- 1000
 
 	patches <- matrix(nrow = numpatches, ncol = patchsize * patchsize)
 	for (i in 1:numpatches) {
@@ -81,16 +81,20 @@ sparse_autoencoder_cost <- function(theta, vis, hid, lambda, sparsity, beta, pat
 	div2   <- a2 * (1 - a2)
 	z3     <- W2 %*% a2 + b2
 	a3     <- sigmoid(z3)
+	rho_hat <- rowMeans(a2)
+	KL     <- sum(sparsity * log(sparsity / rho_hat) +
+	              (1 - sparsity) * log((1 - sparsity) / (1 - rho_hat)))
 	J      <- mean(apply(a3 - t(patches), 2, function(x) { t(x) %*% x }) / 2)
+	J      <- J + lambda / 2 * (sum(W1 ^ 2) + sum(W2 ^2)) + beta * KL
 	div3   <- a3 * (1 - a3)
 	# for output layer
 	delta3 <- -(t(patches) - a3) * div3
 	# for hidden layer(s)
-	delta2 <- (t(W2) %*% delta3) * div2
+	delta2 <- (t(W2) %*% delta3 + beta * (-sparsity/rho_hat + (1-sparsity)/(1-(rho_hat)))) * div2
 	b1grad <- rowMeans(delta2)
 	b2grad <- rowMeans(delta3)
-	W1grad <- (delta2 %*% patches) / ncol(delta2)
-	W2grad <- (delta3 %*% t(a2)) / ncol(delta3)
+	W1grad <- (delta2 %*% patches) / ncol(delta2) + lambda * W1
+	W2grad <- (delta3 %*% t(a2)) / ncol(delta3) + lambda * W2
 	list(J, c(W1grad, W2grad, b1grad, b2grad))
 }
 
@@ -98,6 +102,7 @@ compute_numerical_gradient <- function(FUNC, theta, grad) {
 	epsilon <- 1e-4
 	g <- vector(length = length(theta))
 	for (i in 1:length(theta)) {
+print(i)
 		theta[i] <- theta[i] + epsilon
 		J1 <- FUNC(theta)[[1]]
 		theta[i] <- theta[i] - 2 * epsilon
