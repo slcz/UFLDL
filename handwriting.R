@@ -1,6 +1,7 @@
 library(R.matlab)
 library(functional)
 library(pracma)
+library(lbfgs)
 
 normalize_data <- function(patches) {
 	# Squash data to [0.1, 0.9] since we use sigmoid as the activation
@@ -18,19 +19,19 @@ normalize_data <- function(patches) {
 }
 
 sampleIMAGES <- function() {
-	IMAGES <- readMat("IMAGES.mat")[[1]]
-	IMAGE  <- IMAGES[, , runif(1,1, dim(IMAGES)[3])]
-
-	patchsize <- 8
-	numpatches <- 1000
-
-	patches <- matrix(nrow = numpatches, ncol = patchsize * patchsize)
-	for (i in 1:numpatches) {
-		r <- runif(1, 1, nrow(IMAGE) - patchsize)
-		c <- runif(1, 1, ncol(IMAGE) - patchsize)
-		patches[i, ] <- as.vector(IMAGE[r:(r + patchsize - 1), c:(c + patchsize - 1)])
+	h <- file("train-images-idx3-ubyte", "rb")
+	readBin(h, integer(), n=1, endian="big")
+	n_images <- readBin(h, integer(), n=1, endian="big")
+	row <- readBin(h, integer(), n=1, endian="big")
+	col <- readBin(h, integer(), n=1, endian="big")
+	cat("nimages = ", n_images, " row = ", row, " col = ", col, "\n")
+	IMAGES <- matrix(ncol = row * col, nrow = n_images)
+	for (i in 1:n_images) {
+		m <- matrix(readBin(h, integer(), n=row*col, size=1, endian="big", signed = FALSE), nrow = row, byrow = TRUE) / 255
+		IMAGES[i,] <- (as.vector(m))
 	}
-	patches <- normalize_data(patches)
+	close(h)
+	IMAGES
 }
 
 display_network <- function(A, cols) {
@@ -53,7 +54,7 @@ display_network <- function(A, cols) {
 			k <- k + 1
 		}
 	}
-	image(t(array[nrow(array):1,]), col = gray.colors(256))
+	image(t(array[nrow(array):1,]), col = gray.colors(256, start=0, end=1.0))
 }
 
 initialize_parameters <- function(hidden_size, visible_size) {
@@ -65,7 +66,7 @@ initialize_parameters <- function(hidden_size, visible_size) {
 	c(W1, W2, b1, b2)
 }
 
-sparse_autoencoder_cost <- function(theta, vis, hid, lambda, sparsity, beta, patches) {
+sparse_autoencoder_cost <- function(theta, vis, hid, lambda, sparsity, beta, patches, ret) {
 	t      <- 1
 	W1     <- matrix(theta[t:(t - 1 + vis * hid)], nrow = hid)
 	t      <- t + vis * hid
@@ -86,6 +87,8 @@ sparse_autoencoder_cost <- function(theta, vis, hid, lambda, sparsity, beta, pat
 	              (1 - sparsity) * log((1 - sparsity) / (1 - rho_hat)))
 	J      <- mean(apply(a3 - t(patches), 2, function(x) { t(x) %*% x }) / 2)
 	J      <- J + lambda / 2 * (sum(W1 ^ 2) + sum(W2 ^2)) + beta * KL
+	if (ret == 1)
+		return(J)
 	div3   <- a3 * (1 - a3)
 	# for output layer
 	delta3 <- -(t(patches) - a3) * div3
@@ -95,18 +98,17 @@ sparse_autoencoder_cost <- function(theta, vis, hid, lambda, sparsity, beta, pat
 	b2grad <- rowMeans(delta3)
 	W1grad <- (delta2 %*% patches) / ncol(delta2) + lambda * W1
 	W2grad <- (delta3 %*% t(a2)) / ncol(delta3) + lambda * W2
-	list(J, c(W1grad, W2grad, b1grad, b2grad))
+	c(W1grad, W2grad, b1grad, b2grad)
 }
 
 compute_numerical_gradient <- function(FUNC, theta, grad) {
 	epsilon <- 1e-4
 	g <- vector(length = length(theta))
 	for (i in 1:length(theta)) {
-print(i)
 		theta[i] <- theta[i] + epsilon
-		J1 <- FUNC(theta)[[1]]
+		J1 <- FUNC(theta)
 		theta[i] <- theta[i] - 2 * epsilon
-		J2 <- FUNC(theta)[[1]]
+		J2 <- FUNC(theta)
 		theta[i] <- theta[i] + epsilon
 		g[i] <- (J1 - J2) / (2 * epsilon)
 	}
@@ -117,22 +119,38 @@ print(i)
 check_numerical_gradient <- function() {
 	x <- c(4, 10)
 	grad <- c(2 * x[1] + 3 * x[2], 3 * x[1])
-	compute_numerical_gradient(function(x) { list(x[1] ^ 2 + 3 * x[1] * x[2], c(2 * x[1] + 3 * x[2], 3 * x[1])) }, x, grad)
+	compute_numerical_gradient(function(x) { x[1] ^ 2 + 3 * x[1] * x[2] }, x, grad)
 }
 
 train <- function () {
-	visible_size <- 8 * 8 # number of input units
-	hidden_size <- 25 # number of hidden units
-	sparsity_param <- 0.01 # desired average activation of the hidden units.
-	lambda <- 0.0001 # weight decay parameter
+	visible_size <- 28 * 28 # number of input units
+	hidden_size <- 196 # number of hidden units
+	sparsity_param <- 0.1 # desired average activation of the hidden units.
+	lambda <- 3e-3 # weight decay parameter
 	beta <- 3 # weight of sparsity penalty term
 
-	patches <- sampleIMAGES()
+	patches <- sampleIMAGES()[1:10000,]
 
 	theta <- initialize_parameters(hidden_size, visible_size)
-	grad <- sparse_autoencoder_cost(theta, visible_size, hidden_size, lambda,
-	                                sparsity_param, beta, patches)[[2]]
-	compute_numerical_gradient(Curry(sparse_autoencoder_cost,
-	    vis = visible_size, hid = hidden_size, lambda = lambda,
-	    sparsity = sparsity_param, beta = beta, patches = patches), theta, grad)
+	#grad <- sparse_autoencoder_cost(theta, visible_size, hidden_size, lambda,
+	#                                sparsity_param, beta, patches, ret = 2)
+	#compute_numerical_gradient(Curry(sparse_autoencoder_cost,
+	#    vis = visible_size, hid = hidden_size, lambda = lambda,
+	#    sparsity = sparsity_param, beta = beta, patches = patches, ret = 1), theta, grad)
+	#opt <- lbfgs(Curry(sparse_autoencoder_cost,
+	#	     vis = visible_size, hid = hidden_size, lambda = lambda,
+	#             sparsity = sparsity_param, beta = beta, patches = patches, ret = 1),
+	#             Curry(sparse_autoencoder_cost,
+	# 	     vis = visible_size, hid = hidden_size, lambda = lambda,
+	#             sparsity = sparsity_param, beta = beta, patches = patches, ret = 2),
+	#             theta)
+	opt <- optim(theta, Curry(sparse_autoencoder_cost,
+ 		     vis = visible_size, hid = hidden_size, lambda = lambda,
+ 	             sparsity = sparsity_param, beta = beta, patches = patches, ret = 1),
+ 	             Curry(sparse_autoencoder_cost,
+ 		     vis = visible_size, hid = hidden_size, lambda = lambda,
+ 	             sparsity = sparsity_param, beta = beta, patches = patches, ret = 2),
+ 		     method = "L-BFGS-B", control= c(trace = 1, maxit=400))
+	display_network(matrix(opt$par[1:(hidden_size * visible_size)], nrow = hidden_size), sqrt(hidden_size))
+	opt
 }
