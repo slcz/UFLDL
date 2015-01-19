@@ -1,4 +1,4 @@
-
+library(Matrix)
 
 loadimages <- function(file) {
 	h <- file(file, "rb")
@@ -127,5 +127,29 @@ check_numerical_gradient <- function() {
 	x <- c(4, 10)
 	grad <- c(2 * x[1] + 3 * x[2], 3 * x[1])
 	compute_numerical_gradient(function(x) { x[1] ^ 2 + 3 * x[1] * x[2] }, x, grad)
+}
+
+# ret = 1 => J(theta), ret = 2 => grad(J(theta))
+softmax_cost <- function(theta, k, n, lambda, x, y, ret) {
+	m <- nrow(x)
+	t <- matrix(theta, nrow = k)
+	a <- t %*% t(x)
+	a <- exp(t(t(a) - apply(a, 2, max)))
+	a <- t(t(a) / colSums(a))
+	Y <- sparseMatrix(y, 1:m)
+	if (ret == 1)
+		# J(theta)
+		-1/m * sum(log(colSums(Y * a))) + lambda / 2 * sum(t ^ 2)
+	else
+		# grad(J(theta))
+		as.vector(-1/m * ((Y - a) %*% x) + lambda * t)
+}
+
+softmax_predict <- function (theta, k, x) {
+	t <- matrix(theta, nrow = k)
+	a <- t %*% t(x)
+	a <- exp(t(t(a) - apply(a, 2, max)))
+	htheta <- t(t(a) / colSums(a))
+	apply(htheta, 2, which.max)
 }
 

@@ -7,30 +7,6 @@ library(R.utils)
 
 source("common.R")
 
-# ret = 1 => J(theta), ret = 2 => grad(J(theta))
-softmax_cost <- function(theta, k, n, lambda, x, y, ret) {
-	m <- nrow(x)
-	t <- matrix(theta, nrow = k)
-	a <- t %*% t(x)
-	a <- exp(t(t(a) - apply(a, 2, max)))
-	a <- t(t(a) / colSums(a))
-	Y <- sparseMatrix(y, 1:m)
-	if (ret == 1)
-		# J(theta)
-		-1/m * sum(log(colSums(Y * a))) + lambda / 2 * sum(t ^ 2)
-	else
-		# grad(J(theta))
-		as.vector(-1/m * ((Y - a) %*% x) + lambda * t)
-}
-
-predict <- function (theta, k, x) {
-	t <- matrix(theta, nrow = k)
-	a <- t %*% t(x)
-	a <- exp(t(t(a) - apply(a, 2, max)))
-	htheta <- t(t(a) / colSums(a))
-	apply(htheta, 2, which.max)
-}
-
 train <- function () {
 	numclasses <- 10
 	inputsize <- 28 * 28
@@ -58,7 +34,7 @@ train <- function () {
 	images <- loadimages("t10k-images-idx3-ubyte")
 	labels <- loadlabels("t10k-labels-idx1-ubyte")
 	labels <- sapply(labels, function(x) { if (x == 0) 10 else x })
-	pred <- predict(opt$par, numclasses, images)
+	pred <- softmax_predict(opt$par, numclasses, images)
 	printf("%0.3f%%\n", sum(pred == labels) / length(labels) * 100)
 	opt
 }
