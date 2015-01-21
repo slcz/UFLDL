@@ -153,3 +153,14 @@ softmax_predict <- function (theta, k, x) {
 	apply(htheta, 2, which.max)
 }
 
+feedforwardautoencoder <- function(data, hiddensize, inputsize, theta) {
+	W1 <- matrix(theta[1:(hiddensize * inputsize)], nrow = hiddensize)
+	b1 <- theta[(2*hiddensize*inputsize+1):(2*hiddensize*inputsize+hiddensize)]
+	sigmoid(W1 %*% t(data) + b1)
+}
+
+feedforwardautoencoder2 <- function(data, hiddensize, inputsize, theta) {
+	W1 <- matrix(theta[1:(hiddensize * inputsize)], nrow = hiddensize)
+	b1 <- theta[(hiddensize*inputsize+1):(hiddensize*inputsize+hiddensize)]
+	sigmoid(W1 %*% t(data) + b1)
+}
