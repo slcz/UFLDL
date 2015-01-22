@@ -70,17 +70,17 @@ initialize_parameters <- function(hidden_size, visible_size) {
 	W2 <- matrix(runif(hidden_size * visible_size, -r, r), nrow = visible_size)
 	b1 <- rep(0, hidden_size)
 	b2 <- rep(0, visible_size)
-	c(W1, W2, b1, b2)
+	c(W1, b1, W2, b2)
 }
 
 sparse_autoencoder_cost <- function(theta, vis, hid, lambda, sparsity, beta, patches, ret) {
 	t      <- 1
 	W1     <- matrix(theta[t:(t - 1 + vis * hid)], nrow = hid)
 	t      <- t + vis * hid
-	W2     <- matrix(theta[t:(t - 1 + vis * hid)], nrow = vis)
-	t      <- t + vis * hid
 	b1     <- theta[t:(t - 1 + hid)]
 	t      <- t + hid
+	W2     <- matrix(theta[t:(t - 1 + vis * hid)], nrow = vis)
+	t      <- t + vis * hid
 	b2     <- theta[t:(t - 1 + vis)]
 	stopifnot(t + vis == length(theta) + 1)
 	# feed forward pass
@@ -105,7 +105,7 @@ sparse_autoencoder_cost <- function(theta, vis, hid, lambda, sparsity, beta, pat
 	b2grad <- rowMeans(delta3)
 	W1grad <- (delta2 %*% patches) / ncol(delta2) + lambda * W1
 	W2grad <- (delta3 %*% t(a2)) / ncol(delta3) + lambda * W2
-	c(W1grad, W2grad, b1grad, b2grad)
+	c(W1grad, b1grad, W2grad, b2grad)
 }
 
 compute_numerical_gradient <- function(FUNC, theta, grad) {
@@ -154,12 +154,6 @@ softmax_predict <- function (theta, k, x) {
 }
 
 feedforwardautoencoder <- function(data, hiddensize, inputsize, theta) {
-	W1 <- matrix(theta[1:(hiddensize * inputsize)], nrow = hiddensize)
-	b1 <- theta[(2*hiddensize*inputsize+1):(2*hiddensize*inputsize+hiddensize)]
-	sigmoid(W1 %*% t(data) + b1)
-}
-
-feedforwardautoencoder2 <- function(data, hiddensize, inputsize, theta) {
 	W1 <- matrix(theta[1:(hiddensize * inputsize)], nrow = hiddensize)
 	b1 <- theta[(hiddensize*inputsize+1):(hiddensize*inputsize+hiddensize)]
 	sigmoid(W1 %*% t(data) + b1)

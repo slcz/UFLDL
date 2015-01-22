@@ -153,7 +153,7 @@ optfinetune <- optim(params,
 
 # step 6 test
 
-testdata <- loadimages("t10k-images-idx3-ubyte")
+testdata   <- loadimages("t10k-images-idx3-ubyte")
 testlabels <- loadlabels("t10k-labels-idx1-ubyte")
 testlabels <- sapply(testlabels, function(x) { if (x == 0) 10 else x })
 
@@ -163,9 +163,9 @@ finetunetheta1 <- rest[1:(netconfig[1] * netconfig[2] + netconfig[2])]
 rest <- rest[(netconfig[1] * netconfig[2] + netconfig[2] + 1): length(rest)]
 finetunetheta2 <- rest
 
-test1features <- t(feedforwardautoencoder2(testdata, netconfig[2],
+test1features <- t(feedforwardautoencoder(testdata, netconfig[2],
                                            netconfig[1], finetunetheta1))
-test2features <- t(feedforwardautoencoder2(test1features, netconfig[3],
+test2features <- t(feedforwardautoencoder(test1features, netconfig[3],
                                            netconfig[2], finetunetheta2))
 pred <- softmax_predict(softmaxtheta, numclasses, test2features)
 printf("%0.3f%%\n", sum(pred == testlabels) / length(testlabels) * 100)

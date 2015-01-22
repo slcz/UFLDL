@@ -57,15 +57,8 @@ train <- function() {
 
 opt <- train()
 
-W1 <- matrix(opt$par[1:(hiddensize * inputsize)], nrow = hiddensize)
-b1 <- opt$par[(2*hiddensize*inputsize+1):(2*hiddensize*inputsize+hiddensize)]
-
-feedforwardautoencoder <- function(data, W1, b1) {
-	sigmoid(W1 %*% t(data) + b1)
-}
-
-trainfeatures <- t(feedforwardautoencoder(traindata, W1, b1))
-testfeatures  <- t(feedforwardautoencoder(testdata,  W1, b1))
+trainfeatures <- t(feedforwardautoencoder(traindata, hiddensize, inputsize, opt$par))
+testfeatures  <- t(feedforwardautoencoder(testdata,  hiddensize, inputsize, opt$par))
 
 numclasses <- 5
 inputsize  <- ncol(trainfeatures)
