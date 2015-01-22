@@ -17,6 +17,7 @@ hiddensizel2  <- 200
 sparsityparam <- 0.1
 lambda        <- 3e-3
 beta          <- 3
+netconfig     <- c(inputsize, hiddensizel1, hiddensizel2)
 
 # step 1 load data from the mnist database
 traindata   <- loadimages("train-images-idx3-ubyte")
@@ -132,14 +133,16 @@ checkstackedaecost <- function() {
 }
 
 # step 5 finetune softmax model
-netconfig <- c(28 * 28, hiddensizel1, hiddensizel2)
-params <- c(sae1theta$par[1:(netconfig[1] * netconfig[2])],
-            sae1theta$par[(2 * netconfig[1] * netconfig[2] + 1):
-            (2 * netconfig[1] * netconfig[2] + netconfig[2])],
-            sae2theta$par[1:(netconfig[2] * netconfig[3])],
-            sae2theta$par[(2 * netconfig[2] * netconfig[3] + 1):
-            (2 * netconfig[2] * netconfig[3] + netconfig[3])])
-params <- c(saesoftmaxtheta, params)
+pack_theta <- function(theta, softmax, cfg) {
+	params <- NULL
+	for (i in 1:(length(cfg)-1)) {
+		temp <- cfg[i] * cfg[i+1]
+		params <- c(params, theta[[i]][1:temp], theta[[i]][(temp + 1):(temp + cfg[i+1])])
+	}
+	c(softmax, params)
+}
+
+params <- pack_theta(list(sae1theta$par, sae2theta$par), saesoftmaxtheta, netconfig)
 optfinetune <- optim(params,
                     Curry(finetune_cost,
                           input = netconfig[1], hid = netconfig[length(netconfig)],
