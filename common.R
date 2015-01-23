@@ -1,4 +1,5 @@
 library(Matrix)
+library(grid)
 
 loadimages <- function(file) {
 	h <- file(file, "rb")
@@ -41,6 +42,44 @@ normalize_data <- function(patches) {
 	patches <- (patches + 1) * 0.4 + 0.1;
 }
 
+display_color_network <- function(A) {
+	A  <- A - mean(A)
+	cols <- round(sqrt(ncol(A)))
+	channel_size <- nrow(A) / 3
+	dim <- sqrt(channel_size)
+	dimp <- dim + 1
+	rows <- ceil(ncol(A) / cols)
+	B   <- A[1:channel_size,]
+	C   <- A[(channel_size + 1):(2 * channel_size),]
+	D   <- A[(2 * channel_size + 1):(3 * channel_size),]
+	B   <- B / max(abs(B))
+	C   <- C / max(abs(C))
+	D   <- D / max(abs(D))
+	I   <- NULL
+	for (i in 1:3)
+		I[[i]] <- matrix(rep(1, (dim*rows+rows-1)*(dim*cols+cols-1)),
+		                 nrow = dim*rows+rows-1)
+	for (i in 0:(rows-1)) {
+		for (j in 0:(cols-1)) {
+			if (i * cols + j + 1 > ncol(B))
+				break
+			I[[1]][(i*dimp+1):(i*dimp+dim),(j*dimp+1):(j*dimp+dim)] <-
+				matrix(B[,(i*cols+j+1)],nrow=dim)
+			I[[2]][(i*dimp+1):(i*dimp+dim),(j*dimp+1):(j*dimp+dim)] <-
+				matrix(C[,(i*cols+j+1)],nrow=dim)
+			I[[3]][(i*dimp+1):(i*dimp+dim),(j*dimp+1):(j*dimp+dim)] <-
+				matrix(D[,(i*cols+j+1)],nrow=dim)
+		}
+	}
+	for (i in 1:3) {
+		I[[i]] <- I[[i]] + 1
+		I[[i]] <- I[[i]] / 2
+	}
+	col <- rgb(I[[1]], I[[2]], I[[3]])
+	dim(col) <- dim(I[[1]])
+	grid.raster(col, interpolate=FALSE)
+}
+
 display_network <- function(A, cols) {
 	A  <- A - mean(A)
 	sz <- sqrt(ncol(A))
@@ -71,6 +110,41 @@ initialize_parameters <- function(hidden_size, visible_size) {
 	b1 <- rep(0, hidden_size)
 	b2 <- rep(0, visible_size)
 	c(W1, b1, W2, b2)
+}
+
+sparse_autoencoder_linearcost <- function(theta, vis, hid, lambda, sparsity, beta, patches, ret) {
+	t      <- 1
+	W1     <- matrix(theta[t:(t - 1 + vis * hid)], nrow = hid)
+	t      <- t + vis * hid
+	b1     <- theta[t:(t - 1 + hid)]
+	t      <- t + hid
+	W2     <- matrix(theta[t:(t - 1 + vis * hid)], nrow = vis)
+	t      <- t + vis * hid
+	b2     <- theta[t:(t - 1 + vis)]
+	stopifnot(t + vis == length(theta) + 1)
+	# feed forward pass
+	z2     <- W1 %*% t(patches) + b1
+	a2     <- sigmoid(z2)
+	div2   <- a2 * (1 - a2)
+	z3     <- W2 %*% a2 + b2
+	a3     <- z3
+	rho_hat <- rowMeans(a2)
+	KL     <- sum(sparsity * log(sparsity / rho_hat) +
+	              (1 - sparsity) * log((1 - sparsity) / (1 - rho_hat)))
+	J      <- mean(apply(a3 - t(patches), 2, function(x) { t(x) %*% x }) / 2)
+	J      <- J + lambda / 2 * (sum(W1 ^ 2) + sum(W2 ^2)) + beta * KL
+	if (ret == 1)
+		return(J)
+	div3   <- a3 * (1 - a3)
+	# for output layer
+	delta3 <- -(t(patches) - a3)
+	# for hidden layer(s)
+	delta2 <- (t(W2) %*% delta3 + beta * (-sparsity/rho_hat + (1-sparsity)/(1-(rho_hat)))) * div2
+	b1grad <- rowMeans(delta2)
+	b2grad <- rowMeans(delta3)
+	W1grad <- (delta2 %*% patches) / ncol(delta2) + lambda * W1
+	W2grad <- (delta3 %*% t(a2)) / ncol(delta3) + lambda * W2
+	c(W1grad, b1grad, W2grad, b2grad)
 }
 
 sparse_autoencoder_cost <- function(theta, vis, hid, lambda, sparsity, beta, patches, ret) {
